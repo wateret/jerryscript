@@ -137,16 +137,7 @@ public:
   idx_t
   get_idx (void) const
   {
-    if (_type == jsp_operand_t::TMP)
-    {
-      return _data.uid;
-    }
-    else
-    {
-      JERRY_ASSERT (_type == jsp_operand_t::LITERAL);
-
-      return LITERAL_TO_REWRITE;
-    }
+    return _data.uid;
   } /* get_idx */
 
   /**
@@ -158,16 +149,7 @@ public:
   lit_cpointer_t
   get_literal (void) const
   {
-    if (_type == jsp_operand_t::TMP)
-    {
-      return NOT_A_LITERAL;
-    }
-    else
-    {
-      JERRY_ASSERT (_type == jsp_operand_t::LITERAL);
-
-      return _data.lit_id;
-    }
+    return _data.lit_id;
   } /* get_literal */
 
 private:
