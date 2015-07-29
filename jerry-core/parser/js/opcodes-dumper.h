@@ -29,7 +29,6 @@ class jsp_operand_t
 public:
   enum type_t
   {
-    EMPTY, /**< empty operand */
     LITERAL, /**< operand contains literal value */
     TMP /**< operand contains byte-code register index */
   };
@@ -39,7 +38,8 @@ public:
    */
   jsp_operand_t (void)
   {
-    _type = jsp_operand_t::EMPTY;
+    _type = jsp_operand_t::TMP;
+    _data.uid = INVALID_VALUE;
   } /* jsp_operand_t */
 
   /**
@@ -87,7 +87,7 @@ public:
   bool
   is_empty_operand (void) const
   {
-    return (_type == jsp_operand_t::EMPTY);
+    return (_type == jsp_operand_t::TMP && _data.uid == INVALID_VALUE);
   } /* is_empty_operand */
 
   /**
@@ -125,15 +125,11 @@ public:
     {
       return _data.uid;
     }
-    else if (_type == jsp_operand_t::LITERAL)
-    {
-      return LITERAL_TO_REWRITE;
-    }
     else
     {
-      JERRY_ASSERT (_type == jsp_operand_t::EMPTY);
+      JERRY_ASSERT (_type == jsp_operand_t::LITERAL);
 
-      return INVALID_VALUE;
+      return LITERAL_TO_REWRITE;
     }
   } /* get_idx */
 
@@ -150,15 +146,11 @@ public:
     {
       return NOT_A_LITERAL;
     }
-    else if (_type == jsp_operand_t::LITERAL)
-    {
-      return _data.lit_id;
-    }
     else
     {
-      JERRY_ASSERT (_type == jsp_operand_t::EMPTY);
+      JERRY_ASSERT (_type == jsp_operand_t::LITERAL);
 
-      return NOT_A_LITERAL;
+      return _data.lit_id;
     }
   } /* get_literal */
 
