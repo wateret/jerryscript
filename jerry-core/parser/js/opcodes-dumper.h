@@ -35,12 +35,19 @@ public:
 
   /**
    * Construct empty operand
+   *
+   * @return constructed operand
    */
-  jsp_operand_t (void)
+  static jsp_operand_t
+  make_empty_operand (void)
   {
-    _type = jsp_operand_t::TMP;
-    _data.uid = INVALID_VALUE;
-  } /* jsp_operand_t */
+    jsp_operand_t ret;
+
+    ret._type = jsp_operand_t::TMP;
+    ret._data.uid = INVALID_VALUE;
+
+    return ret;
+  } /* make_empty_operand */
 
   /**
    * Construct literal operand

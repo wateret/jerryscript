@@ -628,7 +628,7 @@ get_diff_from (vm_instr_counter_t oc)
 jsp_operand_t
 empty_operand (void)
 {
-  return jsp_operand_t ();
+  return jsp_operand_t::make_empty_operand ();
 }
 
 jsp_operand_t
