@@ -662,6 +662,125 @@ get_diff_from (vm_instr_counter_t oc)
   return (vm_instr_counter_t) (serializer_get_current_instr_counter () - oc);
 }
 
+/**
+ * Construct empty operand
+ *
+ * @return constructed operand
+ */
+jsp_operand_t
+jsp_operand_t::make_empty_operand (void)
+{
+  jsp_operand_t ret;
+
+  ret._type = jsp_operand_t::TMP;
+  ret._data.uid = INVALID_VALUE;
+
+  return ret;
+} /* jsp_operand_t::make_empty_operand */
+
+/**
+ * Construct literal operand
+ *
+ * @return constructed operand
+ */
+jsp_operand_t
+jsp_operand_t::make_lit_operand (lit_cpointer_t lit_id) /**< literal identifier */
+{
+  JERRY_ASSERT (lit_id.packed_value != NOT_A_LITERAL.packed_value);
+
+  jsp_operand_t ret;
+
+  ret._type = jsp_operand_t::LITERAL;
+  ret._data.lit_id = lit_id;
+
+  return ret;
+} /* jsp_operand_t::make_lit_operand */
+
+/**
+ * Construct register operand
+ *
+ * @return constructed operand
+ */
+jsp_operand_t
+jsp_operand_t::make_reg_operand (idx_t reg_index) /**< register index */
+{
+  JERRY_ASSERT (reg_index != INVALID_VALUE
+                && reg_index != LITERAL_TO_REWRITE);
+
+  jsp_operand_t ret;
+
+  ret._type = jsp_operand_t::TMP;
+  ret._data.uid = reg_index;
+
+  return ret;
+} /* jsp_operand_t::make_reg_operand */
+
+/**
+ * Is it empty operand?
+ *
+ * @return true / false
+ */
+bool
+jsp_operand_t::is_empty_operand (void) const
+{
+  return (_type == jsp_operand_t::TMP && _data.uid == INVALID_VALUE);
+} /* jsp_operand_t::is_empty_operand */
+
+/**
+ * Is it byte-code register operand?
+ *
+ * @return true / false
+ */
+bool
+jsp_operand_t::is_register_operand (void) const
+{
+  return (_type == jsp_operand_t::TMP);
+} /* jsp_operand_t::is_register_operand */
+
+/**
+ * Is it literal operand?
+ *
+ * @return true / false
+ */
+bool
+jsp_operand_t::is_literal_operand (void) const
+{
+  return (_type == jsp_operand_t::LITERAL);
+} /* jsp_operand_t::is_literal_operand */
+
+/**
+ * Get operand's type
+ */
+jsp_operand_t::type_t
+jsp_operand_t::get_type (void) const
+{
+  return _type;
+} /* jsp_operand_t::get_type */
+
+/**
+ * Get idx_t for operand
+ *
+ * @return LITERAL_TO_REWRITE (for jsp_operand_t::LITERAL),
+ *         or register index (for jsp_operand_t::TMP).
+ */
+idx_t
+jsp_operand_t::get_idx (void) const
+{
+  return _data.uid;
+} /* jsp_operand_t::get_idx */
+
+/**
+ * Get literal from operand
+ *
+ * @return literal identifier (for jsp_operand_t::LITERAL),
+ *         or NOT_A_LITERAL (for jsp_operand_t::TMP).
+ */
+lit_cpointer_t
+jsp_operand_t::get_literal (void) const
+{
+  return _data.lit_id;
+} /* jsp_operand_t::get_literal */
+
 jsp_operand_t
 empty_operand (void)
 {

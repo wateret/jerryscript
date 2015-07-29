@@ -33,124 +33,32 @@ public:
     TMP /**< operand contains byte-code register index */
   };
 
-  /**
-   * Construct empty operand
-   *
-   * @return constructed operand
-   */
   static jsp_operand_t
-  make_empty_operand (void)
-  {
-    jsp_operand_t ret;
+  make_empty_operand (void);
 
-    ret._type = jsp_operand_t::TMP;
-    ret._data.uid = INVALID_VALUE;
-
-    return ret;
-  } /* make_empty_operand */
-
-  /**
-   * Construct literal operand
-   *
-   * @return constructed operand
-   */
   static jsp_operand_t
-  make_lit_operand (lit_cpointer_t lit_id) /**< literal identifier */
-  {
-    JERRY_ASSERT (lit_id.packed_value != NOT_A_LITERAL.packed_value);
+  make_lit_operand (lit_cpointer_t lit_id);
 
-    jsp_operand_t ret;
-
-    ret._type = jsp_operand_t::LITERAL;
-    ret._data.lit_id = lit_id;
-
-    return ret;
-  } /* make_lit_operand */
-
-  /**
-   * Construct register operand
-   *
-   * @return constructed operand
-   */
   static jsp_operand_t
-  make_reg_operand (idx_t reg_index) /**< register index */
-  {
-    JERRY_ASSERT (reg_index != INVALID_VALUE
-                  && reg_index != LITERAL_TO_REWRITE);
+  make_reg_operand (idx_t reg_index);
 
-    jsp_operand_t ret;
-
-    ret._type = jsp_operand_t::TMP;
-    ret._data.uid = reg_index;
-
-    return ret;
-  } /* make_reg_operand */
-
-  /**
-   * Is it empty operand?
-   *
-   * @return true / false
-   */
   bool
-  is_empty_operand (void) const
-  {
-    return (_type == jsp_operand_t::TMP && _data.uid == INVALID_VALUE);
-  } /* is_empty_operand */
+  is_empty_operand (void) const;
 
-  /**
-   * Is it byte-code register operand?
-   *
-   * @return true / false
-   */
   bool
-  is_register_operand (void) const
-  {
-    return (_type == jsp_operand_t::TMP);
-  } /* is_register_operand */
+  is_register_operand (void) const;
 
-  /**
-   * Is it literal operand?
-   *
-   * @return true / false
-   */
   bool
-  is_literal_operand (void) const
-  {
-    return (_type == jsp_operand_t::LITERAL);
-  } /* is_literal_operand */
+  is_literal_operand (void) const;
 
-  /**
-   * Get operand's type
-   */
   type_t
-  get_type (void) const
-  {
-    return _type;
-  } /* get_type */
+  get_type (void) const;
 
-  /**
-   * Get idx_t for operand
-   *
-   * @return LITERAL_TO_REWRITE (for jsp_operand_t::LITERAL),
-   *         or register index (for jsp_operand_t::TMP).
-   */
   idx_t
-  get_idx (void) const
-  {
-    return _data.uid;
-  } /* get_idx */
+  get_idx (void) const;
 
-  /**
-   * Get literal from operand
-   *
-   * @return literal identifier (for jsp_operand_t::LITERAL),
-   *         or NOT_A_LITERAL (for jsp_operand_t::TMP).
-   */
   lit_cpointer_t
-  get_literal (void) const
-  {
-    return _data.lit_id;
-  } /* get_literal */
+  get_literal (void) const;
 
 private:
   type_t _type; /**< type of operand */
