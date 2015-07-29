@@ -120,6 +120,15 @@ public:
   } /* is_literal_operand */
 
   /**
+   * Get operand's type
+   */
+  type_t
+  get_type (void) const
+  {
+    return _type;
+  } /* get_type */
+
+  /**
    * Get idx_t for operand
    *
    * @return LITERAL_TO_REWRITE (for jsp_operand_t::LITERAL),
