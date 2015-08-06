@@ -369,9 +369,6 @@ project (Jerry CXX C ASM)
 
     if("${BUILD_MODE}" STREQUAL "RELEASE")
      if(${STRIP_RELEASE_BINARY} STREQUAL "ON")
-      add_custom_command(TARGET ${TARGET_NAME}
-                         POST_BUILD
-                         COMMAND ${CMAKE_STRIP} $<TARGET_FILE:${TARGET_NAME}>)
      endif()
     endif()
    else()

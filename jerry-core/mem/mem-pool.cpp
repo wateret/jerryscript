@@ -46,13 +46,11 @@
 # define VALGRIND_DEFINED_SPACE(p, s)
 #endif /* JERRY_VALGRIND */
 
-static void mem_check_pool (mem_pool_state_t *pool_p);
-
 /**
  * Get address of pool chunk with specified index
  */
-#define MEM_POOL_CHUNK_ADDRESS(pool_header_p, chunk_index) ((uint8_t*) (MEM_POOL_SPACE_START(pool_p) + \
-                                                                        MEM_POOL_CHUNK_SIZE * chunk_index))
+#define MEM_POOL_CHUNK_ADDRESS(pool_header_p, chunk_index) ((mem_pool_chunk_t*) (MEM_POOL_SPACE_START(pool_p) + \
+                                                                                 MEM_POOL_CHUNK_SIZE * chunk_index))
 
 /**
  * Is the chunk is inside of the pool?
@@ -79,135 +77,64 @@ mem_pool_is_chunk_inside (mem_pool_state_t *pool_p, /**< pool */
  *
  * Pool will be located in the segment [pool_start; pool_start + pool_size).
  * Part of pool space will be used for bitmap and the rest will store chunks.
+ *
+ * @return pointer first chunk in the pool's free chunks list
  */
-void
+mem_pool_chunk_t *
 mem_pool_init (mem_pool_state_t *pool_p, /**< pool */
                size_t pool_size)         /**< pool size */
 {
   JERRY_ASSERT (pool_p != NULL);
-  JERRY_ASSERT ((size_t)MEM_POOL_SPACE_START (pool_p) % MEM_ALIGNMENT == 0);
+  JERRY_ASSERT ((size_t) MEM_POOL_SPACE_START (pool_p) % MEM_ALIGNMENT == 0);
 
   JERRY_STATIC_ASSERT (MEM_POOL_CHUNK_SIZE % MEM_ALIGNMENT == 0);
   JERRY_STATIC_ASSERT (MEM_POOL_MAX_CHUNKS_NUMBER_LOG <= sizeof (mem_pool_chunk_index_t) * JERRY_BITSINBYTE);
-  JERRY_ASSERT (sizeof (mem_pool_chunk_index_t) <= MEM_POOL_CHUNK_SIZE);
+  JERRY_STATIC_ASSERT (sizeof (mem_pool_chunk_t) <= MEM_POOL_CHUNK_SIZE);
+  JERRY_STATIC_ASSERT (sizeof (mem_pool_chunk_index_t) <= MEM_POOL_CHUNK_SIZE);
 
-  JERRY_ASSERT (MEM_POOL_SIZE == sizeof (mem_pool_state_t) + MEM_POOL_CHUNKS_NUMBER * MEM_POOL_CHUNK_SIZE);
-  JERRY_ASSERT (MEM_POOL_CHUNKS_NUMBER >= CONFIG_MEM_LEAST_CHUNK_NUMBER_IN_POOL);
+  /* free pool chunks contain pointers */
+  JERRY_STATIC_ASSERT (sizeof (void *) <= sizeof (mem_pool_chunk_t));
+
+  JERRY_ASSERT (MEM_POOL_SIZE == MEM_POOL_CHUNKS_NUMBER * MEM_POOL_CHUNK_SIZE);
+  JERRY_ASSERT (MEM_POOL_CHUNKS_NUMBER <= (1u << CONFIG_MEM_POOL_MAX_CHUNKS_NUMBER_LOG));
 
   JERRY_ASSERT (pool_size == MEM_POOL_SIZE);
 
   /*
-   * All chunks are free right after initialization
-   */
-  pool_p->free_chunks_number = (mem_pool_chunk_index_t) MEM_POOL_CHUNKS_NUMBER;
-  JERRY_ASSERT (pool_p->free_chunks_number == MEM_POOL_CHUNKS_NUMBER);
-
-  /*
    * Chunk with zero index is first free chunk in the pool now
    */
-  pool_p->first_free_chunk = 0;
+  mem_pool_chunk_t *first_chunk_p = MEM_POOL_CHUNK_ADDRESS (pool_p, 0);
+
+  mem_pool_chunk_t *prev_free_chunk_p = NULL;
 
   for (mem_pool_chunk_index_t chunk_index = 0;
        chunk_index < MEM_POOL_CHUNKS_NUMBER;
        chunk_index++)
   {
-    mem_pool_chunk_index_t *next_free_chunk_index_p = (mem_pool_chunk_index_t*) MEM_POOL_CHUNK_ADDRESS (pool_p,
-                                                                                                        chunk_index);
+    mem_pool_chunk_t *chunk_p = MEM_POOL_CHUNK_ADDRESS (pool_p, chunk_index);
 
-    *next_free_chunk_index_p = (mem_pool_chunk_index_t) (chunk_index + 1u);
+    if (prev_free_chunk_p != NULL)
+    {
+      *(mem_pool_chunk_t **) prev_free_chunk_p = chunk_p;
+    }
 
-    VALGRIND_NOACCESS_SPACE (next_free_chunk_index_p, MEM_POOL_CHUNK_SIZE);
+    prev_free_chunk_p = chunk_p;
   }
 
-  mem_check_pool (pool_p);
-} /* mem_pool_init */
+  *(mem_pool_chunk_t **) prev_free_chunk_p = NULL;
 
-/**
- * Allocate a chunk in the pool
- */
-uint8_t*
-mem_pool_alloc_chunk (mem_pool_state_t *pool_p) /**< pool */
-{
-  mem_check_pool (pool_p);
-
-  JERRY_ASSERT (pool_p->free_chunks_number != 0);
-  JERRY_ASSERT (pool_p->first_free_chunk < MEM_POOL_CHUNKS_NUMBER);
-
-  mem_pool_chunk_index_t chunk_index = pool_p->first_free_chunk;
-  uint8_t *chunk_p = MEM_POOL_CHUNK_ADDRESS (pool_p, chunk_index);
-
-  VALGRIND_DEFINED_SPACE (chunk_p, MEM_POOL_CHUNK_SIZE);
-
-  mem_pool_chunk_index_t *next_free_chunk_index_p = (mem_pool_chunk_index_t*) chunk_p;
-  pool_p->first_free_chunk = *next_free_chunk_index_p;
-  pool_p->free_chunks_number--;
-
-  VALGRIND_UNDEFINED_SPACE (chunk_p, MEM_POOL_CHUNK_SIZE);
-
-  mem_check_pool (pool_p);
-
-  return chunk_p;
-} /* mem_pool_alloc_chunk */
-
-/**
- * Free the chunk in the pool
- */
-void
-mem_pool_free_chunk (mem_pool_state_t *pool_p,  /**< pool */
-                     uint8_t *chunk_p)         /**< chunk pointer */
-{
-  JERRY_ASSERT (pool_p->free_chunks_number < MEM_POOL_CHUNKS_NUMBER);
-  JERRY_ASSERT (mem_pool_is_chunk_inside (pool_p, chunk_p));
-  JERRY_ASSERT (((uintptr_t) chunk_p - (uintptr_t) MEM_POOL_SPACE_START (pool_p)) % MEM_POOL_CHUNK_SIZE == 0);
-
-  mem_check_pool (pool_p);
-
-  const size_t chunk_byte_offset = (size_t) (chunk_p - MEM_POOL_SPACE_START (pool_p));
-  const mem_pool_chunk_index_t chunk_index = (mem_pool_chunk_index_t) (chunk_byte_offset / MEM_POOL_CHUNK_SIZE);
-
-  mem_pool_chunk_index_t *next_free_chunk_index_p = (mem_pool_chunk_index_t*) chunk_p;
-
-  *next_free_chunk_index_p = pool_p->first_free_chunk;
-
-  pool_p->first_free_chunk = chunk_index;
-  pool_p->free_chunks_number++;
-
-  VALGRIND_NOACCESS_SPACE (next_free_chunk_index_p, MEM_POOL_CHUNK_SIZE);
-
-  mem_check_pool (pool_p);
-} /* mem_pool_free_chunk */
-
-/**
- * Check pool state consistency
- */
-static void
-mem_check_pool (mem_pool_state_t __attr_unused___ *pool_p) /**< pool (unused #ifdef JERRY_DISABLE_HEAVY_DEBUG) */
-{
-#ifndef JERRY_DISABLE_HEAVY_DEBUG
-  JERRY_ASSERT (pool_p->free_chunks_number <= MEM_POOL_CHUNKS_NUMBER);
-
-  size_t met_free_chunks_number = 0;
-  mem_pool_chunk_index_t chunk_index = pool_p->first_free_chunk;
-
-  while (chunk_index != MEM_POOL_CHUNKS_NUMBER)
+  for (mem_pool_chunk_index_t chunk_index = 0;
+       chunk_index < MEM_POOL_CHUNKS_NUMBER;
+       chunk_index++)
   {
-    uint8_t *chunk_p = MEM_POOL_CHUNK_ADDRESS (pool_p, chunk_index);
-    mem_pool_chunk_index_t *next_free_chunk_index_p = (mem_pool_chunk_index_t*) chunk_p;
+    /* unused if valgrind build mode is turned off */
+    mem_pool_chunk_t *chunk_p __attr_unused___ = MEM_POOL_CHUNK_ADDRESS (pool_p, chunk_index);
 
-    met_free_chunks_number++;
-
-    VALGRIND_DEFINED_SPACE (next_free_chunk_index_p, MEM_POOL_CHUNK_SIZE);
-
-    chunk_index = *next_free_chunk_index_p;
-
-    VALGRIND_NOACCESS_SPACE (next_free_chunk_index_p, MEM_POOL_CHUNK_SIZE);
+    VALGRIND_NOACCESS_SPACE (chunk_p, MEM_POOL_CHUNK_SIZE);
   }
 
-  JERRY_ASSERT (met_free_chunks_number == pool_p->free_chunks_number);
-#else /* !JERRY_DISABLE_HEAVY_DEBUG */
-  (void) pool_p;
-#endif /* JERRY_DISABLE_HEAVY_DEBUG */
-} /* mem_check_pool */
+  return first_chunk_p;
+} /* mem_pool_init */
 
 /**
  * @}

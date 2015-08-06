@@ -41,7 +41,7 @@
 /**
  * Minimum number of chunks in a pool allocated by pools' manager.
  */
-#define CONFIG_MEM_LEAST_CHUNK_NUMBER_IN_POOL (32)
+#define CONFIG_MEM_LEAST_CHUNK_NUMBER_IN_POOL (1)
 
 /**
  * Size of heap chunk
