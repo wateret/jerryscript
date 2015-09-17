@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>jerryscript benchmark</title>
+  
+  <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+  <script type='text/javascript'>//<![CDATA[
+  google.load('visualization', '1', {packages: ['corechart', 'line']});
+  google.setOnLoadCallback(main);
+
+  function add(a, b) { return a + b; }
+
+  Array.prototype.clone = function() {
+    return this.slice(0);
+  }
+
+  Date.prototype.toFormattedString = function() {
+    var yyyy = this.getFullYear().toString();
+    var mm = (this.getMonth() + 1).toString();
+    var dd = this.getDate().toString();
+    mm = mm[1] ? mm : '0' + mm;
+    dd = dd[1] ? dd : '0' + dd;
+    return yyyy + '-' + mm + '-' + dd;
+  }
+
+  Object.values = function(obj) {
+    return Object.keys(obj).map(function(key) { return obj[key]; });
+  }
+
+  var benchmarks = ['sunspider-1.0.2', 'ubench'];
+  var measureTypes = ['memory', 'performance'];
+  var engines = ['jerryscript', 'duktape'];
+  var beginDate = new Date('2015-09-10');
+
+  var benchmarkData = {};
+
+  function main() {
+    // fetch data via ajax
+    var today = new Date();
+    for (var d = beginDate; d <= today; d.setDate(d.getDate() + 1)) {
+      var curDate = (new Date(d)).toFormattedString();
+      $.ajax({
+        _date: curDate,
+        url: 'data/' + curDate + '.json',
+        dataType: 'json',
+        success: function(data) {
+          benchmarkData[this._date] = data;
+        },
+        error: function(request, status, error) {
+          console.log(status);
+        }
+      });
+    }
+  }
+
+  $(document).ajaxStop(function () {
+    benchmarks.forEach(function(benchmark) {
+    measureTypes.forEach(function(measureType) {
+      var transData = {};
+      $.each(benchmarkData, function(date, element) {
+        transData[date] = [];
+        engines.forEach(function(engine, index) {
+          var repVal = undefined;   // default value
+          var benchmark_obj = element[benchmark];
+          if (benchmark_obj) {
+            var record =  benchmark_obj[measureType][engine];
+            if (record) {
+              // record object contains a lot of subtests,
+              // we use sum of all values as representative value
+              var values = Object.values(record);
+              repVal = values.reduce(add);
+            }
+          }
+          transData[date][index] = repVal;
+        });
+      });
+      
+      // transform data for google charts
+      var data = new google.visualization.DataTable();
+      data.addColumn('string', 'Date');
+      engines.forEach(function(engine) {
+        data.addColumn('number', engine);
+        data.addColumn({type: 'string', role: 'tooltip'});
+      });
+      var arrayData = Object.keys(transData).sort().map(function(key) {
+        var row = Object.values(transData[key]);
+        var tooltips = row.clone().map(function(value, index) {
+          return engines[index] + ' / ' +  key + ' / ' + value;
+        });
+
+        // zip row and tooltips
+        // so the array will be like [data, tooltip, data, tooltip, ...]
+        row = row.map(function (v, i) {
+          return [v, tooltips[i]];
+        }).reduce(function(a, b) {
+          return a.concat(b)
+        });
+        return [key].concat(row);
+      });
+      data.addRows(arrayData);
+
+      var options = {
+        title: measureType,
+        legend: { position: 'bottom' }
+      };
+      var divObj = document.getElementById(
+          ['chart', benchmark, measureType].join('_'));
+      if (divObj) {
+        var chart = new google.visualization.LineChart(divObj);
+        chart.draw(data, options);
+      }
+    });
+    });
+  });
+  </script>
+
+</head>
+<body>
+
+<div id="wrapper_sunspider-1.0.2">
+<h1>sunspider-1.0.2</h1>
+<div id="chart_sunspider-1.0.2_memory"></div>
+<div id="chart_sunspider-1.0.2_performance"></div>
+</div>
+
+<div id="wrapper_ubench">
+<h1>ubench</h1>
+<div id="chart_ubench_memory"></div>
+<div id="chart_ubench_performance"></div>
+</div>
+</body>
+
+</html>
+
