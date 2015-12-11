@@ -489,4 +489,6 @@ void rewrite_reg_var_decl (vm_instr_counter_t);
 void dump_ret (void);
 void dump_retval (jsp_operand_t);
 
+bool try_merge_redundant_assignment (jsp_operand_t);
+
 #endif /* OPCODES_DUMPER_H */

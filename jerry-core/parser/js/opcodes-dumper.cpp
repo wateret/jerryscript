@@ -174,6 +174,15 @@ jsp_alloc_reg_for_temp (void)
   return next_reg;
 } /* jsp_alloc_reg_for_temp */
 
+/**
+* Check if given register index is for temps
+*/
+static bool
+is_temp_register (const vm_idx_t reg) /**< register index */
+{
+  return VM_REG_GENERAL_FIRST <= reg && reg <= jsp_reg_max_for_temps;
+}
+
 #ifdef CONFIG_PARSER_ENABLE_PARSE_TIME_BYTE_CODE_OPTIMIZER
 /**
  * Start move of variable values to registers optimization pass
@@ -557,6 +566,12 @@ static op_meta
 last_dumped_op_meta (void)
 {
   return serializer_get_op_meta ((vm_instr_counter_t) (serializer_get_current_instr_counter () - 1));
+}
+
+static void
+rewrite_last_dumped_op_meta (op_meta opm)
+{
+  serializer_rewrite_op_meta ((vm_instr_counter_t) (serializer_get_current_instr_counter () - 1), opm);
 }
 
 static void
@@ -1925,7 +1940,22 @@ dump_prop_setter_or_variable_assignment_res (jsp_operand_t res, jsp_operand_t op
   }
   else
   {
-    dump_variable_assignment (res, op);
+    op_meta last = last_dumped_op_meta ();
+    if (STACK_SIZE (varg_headers) == 0 /* not in the middle of function call */
+        && (last.op.op_idx == VM_OP_ASSIGNMENT
+            || last.op.op_idx == VM_OP_ADDITION)
+        && is_temp_register (last.op.data.assignment.var_left))
+    {
+      last.op.data.assignment.var_left = res.get_idx ();
+      last.lit_id[0] = res.get_literal ();
+
+      rewrite_last_dumped_op_meta (last);
+      op = res;
+    }
+    else
+    {
+      dump_variable_assignment (res, op);
+    }
   }
   return op;
 }
