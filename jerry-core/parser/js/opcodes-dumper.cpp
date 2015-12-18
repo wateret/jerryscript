@@ -239,41 +239,14 @@ dumper_start_move_of_args_to_regs (uint32_t args_num) /**< number of arguments *
 bool
 dumper_try_replace_identifier_name_with_reg (scopes_tree tree, /**< a function scope, created for
                                                                 *   function declaration or function expresssion */
-                                             op_meta *om_p) /**< operation meta of corresponding
-                                                             *   variable declaration */
+                                             lit_cpointer_t lit_cp, /**< variable literal cpointer */
+                                             bool is_param) /** is parameter or local */
 {
   JERRY_ASSERT (tree->type == SCOPE_TYPE_FUNCTION);
 
-  lit_cpointer_t lit_cp;
-  bool is_arg;
-
-  if (om_p->op.op_idx == VM_OP_VAR_DECL)
-  {
-    JERRY_ASSERT (om_p->lit_id[0].packed_value != NOT_A_LITERAL.packed_value);
-    JERRY_ASSERT (om_p->lit_id[1].packed_value == NOT_A_LITERAL.packed_value);
-    JERRY_ASSERT (om_p->lit_id[2].packed_value == NOT_A_LITERAL.packed_value);
-
-    lit_cp = om_p->lit_id[0];
-
-    is_arg = false;
-  }
-  else
-  {
-    JERRY_ASSERT (om_p->op.op_idx == VM_OP_META);
-
-    JERRY_ASSERT (om_p->op.data.meta.type == OPCODE_META_TYPE_VARG);
-    JERRY_ASSERT (om_p->lit_id[0].packed_value == NOT_A_LITERAL.packed_value);
-    JERRY_ASSERT (om_p->lit_id[1].packed_value != NOT_A_LITERAL.packed_value);
-    JERRY_ASSERT (om_p->lit_id[2].packed_value == NOT_A_LITERAL.packed_value);
-
-    lit_cp = om_p->lit_id[1];
-
-    is_arg = true;
-  }
-
   vm_idx_t reg;
 
-  if (is_arg)
+  if (is_param)
   {
     JERRY_ASSERT (jsp_reg_max_for_args != VM_IDX_EMPTY);
     JERRY_ASSERT (jsp_reg_max_for_args < VM_REG_GENERAL_LAST);
@@ -2389,16 +2362,6 @@ dump_throw (jsp_operand_t op)
 }
 
 /**
- * Dump instruction designating variable declaration
- */
-void
-dump_variable_declaration (lit_cpointer_t lit_id) /**< literal which holds variable's name */
-{
-  jsp_operand_t op_var_name = jsp_operand_t::make_lit_operand (lit_id);
-  serializer_dump_var_decl (jsp_dmp_create_op_meta (VM_OP_VAR_DECL, &op_var_name, 1));
-} /* dump_variable_declaration */
-
-/**
  * Dump template of 'meta' instruction for scope's code flags.
  *
  * Note:
@@ -2513,6 +2476,26 @@ void
 dump_retval (jsp_operand_t op)
 {
   dump_single_address (VM_OP_RETVAL, op);
+}
+
+/**
+ * build a op_meta with given literal id
+ */
+op_meta
+build_variable_op_meta (lit_cpointer_t lit_id, /**< variable literal cpointer */
+                        bool is_param) /** is parameter or local */
+{
+  if (is_param)
+  {
+    jsp_operand_t meta_type_operand = jsp_operand_t::make_idx_const_operand (OPCODE_META_TYPE_VARG);
+    jsp_operand_t lit_id_operand = jsp_operand_t::make_lit_operand (lit_id);
+    return jsp_dmp_create_op_meta_2 (VM_OP_META, meta_type_operand, lit_id_operand);
+  }
+  else
+  {
+    jsp_operand_t lit_op = jsp_operand_t::make_lit_operand (lit_id);
+    return jsp_dmp_create_op_meta_1 (VM_OP_VAR_DECL, lit_op);
+  }
 }
 
 void

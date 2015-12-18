@@ -307,7 +307,7 @@ void dumper_free (void);
 
 void dumper_start_move_of_vars_to_regs ();
 bool dumper_start_move_of_args_to_regs (uint32_t args_num);
-bool dumper_try_replace_identifier_name_with_reg (scopes_tree, op_meta *);
+bool dumper_try_replace_identifier_name_with_reg (scopes_tree, lit_cpointer_t, bool);
 void dumper_alloc_reg_for_unused_arg (void);
 
 void dumper_new_statement (void);
@@ -478,8 +478,6 @@ void rewrite_finally (void);
 void dump_end_try_catch_finally (void);
 void dump_throw (jsp_operand_t);
 
-void dump_variable_declaration (lit_cpointer_t);
-
 vm_instr_counter_t dump_scope_code_flags_for_rewrite (void);
 void rewrite_scope_code_flags (vm_instr_counter_t, opcode_scope_code_flags_t);
 
@@ -488,5 +486,7 @@ void rewrite_reg_var_decl (vm_instr_counter_t);
 
 void dump_ret (void);
 void dump_retval (jsp_operand_t);
+
+op_meta build_variable_op_meta (lit_cpointer_t, bool);
 
 #endif /* OPCODES_DUMPER_H */

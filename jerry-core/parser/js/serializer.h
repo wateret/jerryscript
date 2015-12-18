@@ -34,7 +34,7 @@ void serializer_set_scope (scopes_tree);
 void serializer_dump_subscope (scopes_tree);
 const bytecode_data_header_t *serializer_merge_scopes_into_bytecode (void);
 void serializer_dump_op_meta (op_meta);
-void serializer_dump_var_decl (op_meta);
+void serializer_add_variable (lit_cpointer_t, bool);
 vm_instr_counter_t serializer_get_current_instr_counter (void);
 vm_instr_counter_t serializer_count_instrs_in_subscopes (void);
 void serializer_set_writing_position (vm_instr_counter_t);

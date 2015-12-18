@@ -593,6 +593,7 @@ parse_argument_list (varg_list_type vlt, jsp_operand_t obj, jsp_operand_t *this_
       current_token_must_be (TOK_NAME);
       op = literal_operand (token_data_as_lit_cp ());
       jsp_early_error_add_varg (op);
+      serializer_add_variable (token_data_as_lit_cp (), true);
       dump_varg (op);
       skip_newlines ();
     }
@@ -885,6 +886,7 @@ parse_primary_expression (void)
       {
         scopes_tree_set_eval_used (STACK_TOP (scopes));
       }
+      scopes_tree_static_resolve (STACK_TOP (scopes), token_data_as_lit_cp ());
       return literal_operand (token_data_as_lit_cp ());
     }
     case TOK_OPEN_SQUARE: return parse_array_literal ();
@@ -1874,11 +1876,11 @@ parse_variable_declaration (void)
   const lit_cpointer_t lit_cp = token_data_as_lit_cp ();
   const jsp_operand_t name = literal_operand (lit_cp);
 
-  if (!scopes_tree_variable_declaration_exists (STACK_TOP (scopes), lit_cp))
+  if (!scopes_tree_variable_exists (STACK_TOP (scopes), lit_cp))
   {
     jsp_early_error_check_for_eval_and_arguments_in_strict_mode (name, is_strict_mode (), tok.loc);
 
-    dump_variable_declaration (lit_cp);
+    serializer_add_variable (lit_cp, false);
   }
 
   skip_newlines ();
@@ -3126,54 +3128,38 @@ parse_source_element_list (bool is_global, /**< flag, indicating that we parsing
         }
       }
 
-      uint32_t args_num = (uint32_t) (function_end_pos - instr_pos);
-
+      /* move variables to regs */
       dumper_start_move_of_vars_to_regs ();
-
-      /* remove declarations of variables with names equal to an argument's name */
-      vm_instr_counter_t var_decl_pos = 0;
-      while (var_decl_pos < linked_list_get_length (fe_scope_tree->var_decls))
+      vm_instr_counter_t variable_pos = 0;
+      while (variable_pos < linked_list_get_length (fe_scope_tree->variables))
       {
-        op_meta *om_p = (op_meta *) linked_list_element (fe_scope_tree->var_decls, var_decl_pos);
-        bool is_removed = false;
-
-        for (vm_instr_counter_t arg_index = instr_pos;
-             arg_index < function_end_pos;
-             arg_index++)
+        const scope_variable *variable = (scope_variable *) linked_list_element (fe_scope_tree->variables,
+                                                                                 variable_pos);
+        if (!variable->is_param)
         {
-          op_meta meta_opm = scopes_tree_op_meta (fe_scope_tree, arg_index);
-          JERRY_ASSERT (meta_opm.op.op_idx == VM_OP_META);
-
-          JERRY_ASSERT (meta_opm.op.data.meta.data_1 == VM_IDX_REWRITE_LITERAL_UID);
-          JERRY_ASSERT (om_p->op.data.var_decl.variable_name == VM_IDX_REWRITE_LITERAL_UID);
-
-          if (meta_opm.lit_id[1].packed_value == om_p->lit_id[0].packed_value)
+          if (!dumper_try_replace_identifier_name_with_reg (fe_scope_tree, variable->lit_id, variable->is_param))
           {
-            linked_list_remove_element (fe_scope_tree->var_decls, var_decl_pos);
-
-            is_removed = true;
-            break;
-          }
-        }
-
-        if (!is_removed)
-        {
-          if (!dumper_try_replace_identifier_name_with_reg (fe_scope_tree, om_p))
-          {
-            var_decl_pos++;
+            variable_pos++;
           }
           else
           {
-            linked_list_remove_element (fe_scope_tree->var_decls, var_decl_pos);
+            linked_list_remove_element (fe_scope_tree->variables, variable_pos);
+            fe_scope_tree->local_count--;
           }
         }
+        else
+        {
+          variable_pos++;
+        }
       }
+
+      uint32_t args_num = (uint32_t) fe_scope_tree->param_count;
 
       if (dumper_start_move_of_args_to_regs (args_num))
       {
         scope_flags = (opcode_scope_code_flags_t) (scope_flags | OPCODE_SCOPE_CODE_FLAGS_ARGUMENTS_ON_REGISTERS);
 
-        JERRY_ASSERT (linked_list_get_length (fe_scope_tree->var_decls) == 0);
+        JERRY_ASSERT (fe_scope_tree->local_count == 0);
         scope_flags = (opcode_scope_code_flags_t) (scope_flags | OPCODE_SCOPE_CODE_FLAGS_NO_LEX_ENV);
 
         /* at this point all arguments can be moved to registers */
@@ -3249,7 +3235,7 @@ parse_source_element_list (bool is_global, /**< flag, indicating that we parsing
               JERRY_ASSERT (meta_opm.op.data.meta.data_1 == VM_IDX_REWRITE_LITERAL_UID);
               JERRY_ASSERT (meta_opm.lit_id[1].packed_value != NOT_A_LITERAL.packed_value);
 
-              bool is_replaced = dumper_try_replace_identifier_name_with_reg (fe_scope_tree, &meta_opm);
+              bool is_replaced = dumper_try_replace_identifier_name_with_reg (fe_scope_tree, meta_opm.lit_id[1], true);
               JERRY_ASSERT (is_replaced);
             }
 

@@ -19,6 +19,7 @@
 #include "pretty-printer.h"
 #include "array-list.h"
 #include "scopes-tree.h"
+#include "opcodes-dumper.h"
 
 static bytecode_data_header_t *first_bytecode_header_p;
 static scopes_tree current_scope;
@@ -121,12 +122,16 @@ serializer_dump_subscope (scopes_tree tree) /**< scope to dump */
     }
     scopes_tree_add_op_meta (current_scope, *om_p);
   }
-  for (vm_instr_counter_t var_decl_pos = 0;
-       var_decl_pos < linked_list_get_length (tree->var_decls);
-       var_decl_pos++)
+  for (vm_instr_counter_t variable_pos = 0;
+       variable_pos < linked_list_get_length (tree->variables);
+       variable_pos++)
   {
-    op_meta *om_p = (op_meta *) linked_list_element (tree->var_decls, var_decl_pos);
-    scopes_tree_add_op_meta (current_scope, *om_p);
+    const scope_variable *variable = (scope_variable *) linked_list_element (tree->variables, variable_pos);
+    if (!variable->is_param)
+    {
+      op_meta om_p = build_variable_op_meta (variable->lit_id, variable->is_param);
+      scopes_tree_add_op_meta (current_scope, om_p);
+    }
   }
   for (uint8_t child_id = 0; child_id < tree->t.children_num; child_id++)
   {
@@ -205,13 +210,11 @@ serializer_dump_op_meta (op_meta op)
  * Dump variable declaration into the current scope
  */
 void
-serializer_dump_var_decl (op_meta op) /**< variable declaration instruction */
+serializer_add_variable (lit_cpointer_t lit_id, /**< literal id */
+                         bool is_param) /** is parameter or local */
 {
-  JERRY_ASSERT (scopes_tree_instrs_num (current_scope)
-                + linked_list_get_length (current_scope->var_decls) < MAX_OPCODES);
-
-  scopes_tree_add_var_decl (current_scope, op);
-} /* serializer_dump_var_decl */
+  scopes_tree_add_variable (current_scope, lit_id, is_param);
+} /* serializer_add_variable */
 
 vm_instr_counter_t
 serializer_get_current_instr_counter (void)

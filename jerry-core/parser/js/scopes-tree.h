@@ -55,6 +55,16 @@ typedef enum
 } scope_type_t;
 
 /**
+ * Scope variable type
+ */
+typedef struct
+{
+  lit_cpointer_t lit_id;
+  bool is_param: 1;
+  bool is_stack: 1;
+} scope_variable;
+
+/**
  * Structure for holding scope information during parsing
  */
 typedef struct
@@ -62,13 +72,17 @@ typedef struct
   tree_header t; /**< header */
   linked_list instrs; /**< instructions */
   vm_instr_counter_t instrs_count; /**< count of instructions */
-  linked_list var_decls; /**< instructions for variable declarations */
+  linked_list variables; /**< parameter, local variables (declared by keyword 'var')
+                          *   all parameters must precede local variables
+                          *   the order of parameters must be same as function declaration parameter order */
+  vm_instr_counter_t param_count; /**< count of local variables*/
+  vm_instr_counter_t local_count; /**< count of parameter variables*/
   scope_type_t type : 2; /**< scope type */
   bool strict_mode: 1; /**< flag, indicating that scope's code should be executed in strict mode */
   bool ref_arguments: 1; /**< flag, indicating that "arguments" variable is used inside the scope
                           *   (not depends on subscopes) */
   bool ref_eval: 1; /**< flag, indicating that "eval" is used inside the scope
-                          *   (not depends on subscopes) */
+                     *   (not depends on subscopes) */
   bool contains_with: 1; /**< flag, indicationg whether 'with' statement is contained in the scope
                           *   (not depends on subscopes) */
   bool contains_try: 1; /**< flag, indicationg whether 'try' statement is contained in the scope
@@ -83,17 +97,15 @@ typedef scopes_tree_int *scopes_tree;
 scopes_tree scopes_tree_init (scopes_tree, scope_type_t);
 void scopes_tree_free (scopes_tree);
 vm_instr_counter_t scopes_tree_instrs_num (scopes_tree);
-vm_instr_counter_t scopes_tree_var_decls_num (scopes_tree);
 void scopes_tree_add_op_meta (scopes_tree, op_meta);
-void scopes_tree_add_var_decl (scopes_tree, op_meta);
+void scopes_tree_add_variable (scopes_tree, lit_cpointer_t, bool);
 void scopes_tree_set_op_meta (scopes_tree, vm_instr_counter_t, op_meta);
 void scopes_tree_set_instrs_num (scopes_tree, vm_instr_counter_t);
 op_meta scopes_tree_op_meta (scopes_tree, vm_instr_counter_t);
-op_meta scopes_tree_var_decl (scopes_tree, vm_instr_counter_t);
 void scopes_tree_remove_op_meta (scopes_tree tree, vm_instr_counter_t oc);
 size_t scopes_tree_count_literals_in_blocks (scopes_tree);
 vm_instr_counter_t scopes_tree_count_instructions (scopes_tree);
-bool scopes_tree_variable_declaration_exists (scopes_tree, lit_cpointer_t);
+bool scopes_tree_variable_exists (scopes_tree, lit_cpointer_t);
 vm_instr_t *scopes_tree_raw_data (scopes_tree, uint8_t *, size_t, lit_id_hash_table *);
 void scopes_tree_set_strict_mode (scopes_tree, bool);
 void scopes_tree_set_arguments_used (scopes_tree);
@@ -103,5 +115,6 @@ void scopes_tree_set_contains_try (scopes_tree);
 void scopes_tree_set_contains_delete (scopes_tree);
 void scopes_tree_set_contains_functions (scopes_tree);
 bool scopes_tree_strict_mode (scopes_tree);
+void scopes_tree_static_resolve (scopes_tree, lit_cpointer_t);
 
 #endif /* SCOPES_TREE_H */

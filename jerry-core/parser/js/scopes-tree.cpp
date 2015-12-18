@@ -16,6 +16,7 @@
 #include "bytecode-data.h"
 #include "jsp-mm.h"
 #include "scopes-tree.h"
+#include "opcodes-dumper.h"
 
 #define HASH_SIZE 128
 
@@ -50,18 +51,6 @@ scopes_tree_instrs_num (scopes_tree t)
   return t->instrs_count;
 }
 
-/**
- * Get number of variable declarations in the scope
- *
- * @return number of variable declarations
- */
-vm_instr_counter_t
-scopes_tree_var_decls_num (scopes_tree t) /**< scope */
-{
-  assert_tree (t);
-  return linked_list_get_length (t->var_decls);
-} /* scopes_tree_var_decls_num */
-
 void
 scopes_tree_add_op_meta (scopes_tree tree, op_meta op)
 {
@@ -70,14 +59,56 @@ scopes_tree_add_op_meta (scopes_tree tree, op_meta op)
 }
 
 /**
- * Add variable declaration to a scope
+ * Add local, parameter variable to a scope
  */
 void
-scopes_tree_add_var_decl (scopes_tree tree, /**< scope, to which variable declaration is added */
-                          op_meta op) /**< variable declaration instruction */
+scopes_tree_add_variable (scopes_tree tree, /**< scope, to which variable declaration is added */
+                          lit_cpointer_t lit_id, /**< literal id */
+                          bool is_param) /** is parameter or local */
 {
   assert_tree (tree);
-  linked_list_set_element (tree->var_decls, linked_list_get_length (tree->var_decls), &op);
+  scope_variable new_variable;
+  new_variable.lit_id = lit_id;
+  new_variable.is_param = is_param;
+  new_variable.is_stack = true;
+
+  for (vm_instr_counter_t variable_pos = 0;
+       variable_pos < linked_list_get_length (tree->variables);
+       variable_pos++)
+  {
+    scope_variable *variable = (scope_variable *) linked_list_element (tree->variables, variable_pos);
+    if (variable->lit_id.packed_value == lit_id.packed_value)
+    {
+      if (!is_param)
+      {
+        /* do nothing for duplicated local arguments */
+        return;
+      }
+      else if (variable->is_param)
+      {
+        /* duplicated parameters should be added */
+        break;
+      }
+      else
+      {
+        JERRY_ASSERT (!variable->is_param && is_param);
+
+        /* parameters must precede locals in the variable list */
+        JERRY_UNREACHABLE ();
+      }
+    }
+  }
+
+  linked_list_set_element (tree->variables, linked_list_get_length (tree->variables), &new_variable);
+
+  if (is_param)
+  {
+    tree->param_count++;
+  }
+  else
+  {
+    tree->local_count++;
+  }
 } /* scopes_tree_add_var_decl */
 
 void
@@ -105,20 +136,6 @@ scopes_tree_op_meta (scopes_tree tree, vm_instr_counter_t oc)
 }
 
 /**
- * Get variable declaration for the specified scope
- *
- * @return instruction, declaring a variable
- */
-op_meta
-scopes_tree_var_decl (scopes_tree tree, /**< scope, from which variable declaration is retrieved */
-                      vm_instr_counter_t oc) /**< number of variable declaration in the scope */
-{
-  assert_tree (tree);
-  JERRY_ASSERT (oc < linked_list_get_length (tree->var_decls));
-  return *(op_meta *) linked_list_element (tree->var_decls, oc);
-} /* scopes_tree_var_decl */
-
-/**
  * Remove specified instruction from scopes tree node's instructions list
  */
 void
@@ -136,7 +153,7 @@ vm_instr_counter_t
 scopes_tree_count_instructions (scopes_tree t)
 {
   assert_tree (t);
-  vm_instr_counter_t res = (vm_instr_counter_t) (t->instrs_count + linked_list_get_length (t->var_decls));
+  vm_instr_counter_t res = (vm_instr_counter_t) (t->instrs_count + t->local_count);
   for (uint8_t i = 0; i < t->t.children_num; i++)
   {
     res = (vm_instr_counter_t) (
@@ -152,28 +169,24 @@ scopes_tree_count_instructions (scopes_tree t)
  * @return true / false
  */
 bool
-scopes_tree_variable_declaration_exists (scopes_tree tree, /**< scope */
+scopes_tree_variable_exists (scopes_tree tree, /**< scope */
                                          lit_cpointer_t lit_id) /**< literal which holds variable's name */
 {
   assert_tree (tree);
 
   for (vm_instr_counter_t oc = 0u;
-       oc < linked_list_get_length (tree->var_decls);
+       oc < linked_list_get_length (tree->variables);
        oc++)
   {
-    const op_meta* var_decl_om_p = (op_meta *) linked_list_element (tree->var_decls, oc);
-
-    JERRY_ASSERT (var_decl_om_p->op.op_idx == VM_OP_VAR_DECL);
-    JERRY_ASSERT (var_decl_om_p->op.data.var_decl.variable_name == VM_IDX_REWRITE_LITERAL_UID);
-
-    if (var_decl_om_p->lit_id[0].packed_value == lit_id.packed_value)
+    const scope_variable *variable = (scope_variable *) linked_list_element (tree->variables, oc);
+    if (variable->lit_id.packed_value == lit_id.packed_value)
     {
       return true;
     }
   }
 
   return false;
-} /* scopes_tree_variable_declaration_exists */
+} /* scopes_tree_variable_exists */
 
 static uint16_t
 lit_id_hash (void * lit_id)
@@ -308,12 +321,10 @@ extract_op_meta (linked_list instr_list, /**< instruction list */
  * @return generated instruction
  */
 static vm_instr_t
-generate_instr (linked_list instr_list, /**< instruction list */
-                vm_instr_counter_t instr_pos, /**< position where to generate an instruction */
+generate_instr (op_meta *om_p, /**< original op_meta instruction */
                 lit_id_hash_table *lit_ids) /**< hash table binding operand identifiers and literals */
 {
   start_new_block_if_necessary ();
-  op_meta *om_p = extract_op_meta (instr_list, instr_pos);
   /* Now we should change uids of instructions.
      Since different instructions has different literals/tmps in different places,
      we should change only them.
@@ -631,12 +642,17 @@ scopes_tree_count_literals_in_blocks (scopes_tree tree) /**< scope */
     result += count_new_literals_in_instr (om_p);
   }
 
-  for (vm_instr_counter_t var_decl_pos = 0;
-       var_decl_pos < linked_list_get_length (tree->var_decls);
-       var_decl_pos++)
+  for (vm_instr_counter_t variable_pos = 0;
+       variable_pos < linked_list_get_length (tree->variables);
+       variable_pos++)
   {
-    op_meta *om_p = extract_op_meta (tree->var_decls, var_decl_pos);
-    result += count_new_literals_in_instr (om_p);
+    const scope_variable *variable = (scope_variable *) linked_list_element (tree->variables, variable_pos);
+    /* parameters were already handled above */
+    if (!variable->is_param)
+    {
+      op_meta om = build_variable_op_meta (variable->lit_id, variable->is_param);
+      result += count_new_literals_in_instr (&om);
+    }
   }
 
   for (uint8_t child_id = 0; child_id < tree->t.children_num; child_id++)
@@ -690,16 +706,22 @@ merge_subscopes (scopes_tree tree, /**< scopes tree to merge */
     {
       header = false;
     }
-    data_p[global_oc] = generate_instr (tree->instrs, instr_pos, lit_ids_p);
+    data_p[global_oc] = generate_instr (om_p, lit_ids_p);
     global_oc++;
   }
 
-  for (vm_instr_counter_t var_decl_pos = 0;
-       var_decl_pos < linked_list_get_length (tree->var_decls);
-       var_decl_pos++)
+  for (vm_instr_counter_t variable_pos = 0;
+       variable_pos < linked_list_get_length (tree->variables);
+       variable_pos++)
   {
-    data_p[global_oc] = generate_instr (tree->var_decls, var_decl_pos, lit_ids_p);
-    global_oc++;
+    scope_variable *variable = (scope_variable *) linked_list_element (tree->variables, variable_pos);
+    /* parameters were already handled above */
+    if (!variable->is_param)
+    {
+      op_meta om = build_variable_op_meta (variable->lit_id, variable->is_param);
+      data_p[global_oc] = generate_instr (&om, lit_ids_p);
+      global_oc++;
+    }
   }
 
   for (uint8_t child_id = 0; child_id < tree->t.children_num; child_id++)
@@ -710,7 +732,8 @@ merge_subscopes (scopes_tree tree, /**< scopes tree to merge */
 
   for (; instr_pos < tree->instrs_count; instr_pos++)
   {
-    data_p[global_oc] = generate_instr (tree->instrs, instr_pos, lit_ids_p);
+    op_meta *om_p = extract_op_meta (tree->instrs, instr_pos);
+    data_p[global_oc] = generate_instr (om_p, lit_ids_p);
     global_oc++;
   }
 } /* merge_subscopes */
@@ -770,7 +793,7 @@ scopes_tree_set_arguments_used (scopes_tree tree) /**< scope */
 {
   assert_tree (tree);
   tree->ref_arguments = true;
-} /* merge_subscopes */
+} /* scopes_tree_set_arguments_used */
 
 /**
  * Set up a flag, indicating that "eval" is used inside a scope
@@ -864,7 +887,9 @@ scopes_tree_init (scopes_tree parent, /**< parent scope */
   tree->contains_delete = false;
   tree->contains_functions = false;
   tree->instrs = linked_list_init (sizeof (op_meta));
-  tree->var_decls = linked_list_init (sizeof (op_meta));
+  tree->variables = linked_list_init (sizeof (scope_variable));
+  tree->param_count = 0;
+  tree->local_count = 0;
   return tree;
 } /* scopes_tree_init */
 
@@ -880,7 +905,41 @@ scopes_tree_free (scopes_tree tree)
     }
     linked_list_free (tree->t.children);
   }
+
   linked_list_free (tree->instrs);
-  linked_list_free (tree->var_decls);
+
+  JERRY_ASSERT (linked_list_get_length (tree->variables) == tree->local_count + tree->param_count);
+  linked_list_free (tree->variables);
+
   jsp_mm_free (tree);
+}
+
+/**
+ * Try to resolve a string literal through the scope tree chain
+ *
+ * If variable is found in some scope it will be marked as non-stack variable.
+ * Which means that the variable will be refered in subscopes.
+ * After all these analysis is done, only stack variables can be moved to registers.
+ */
+void scopes_tree_static_resolve (scopes_tree tree, /**< scope */
+                                 lit_cpointer_t lit_id) /**< string literal to resolve */
+{
+  assert_tree (tree);
+  scopes_tree current_tree = tree;
+  while (current_tree)
+  {
+    for (vm_instr_counter_t oc = 0u;
+         oc < linked_list_get_length (current_tree->variables);
+         oc++)
+    {
+      scope_variable *variable = (scope_variable *) linked_list_element (current_tree->variables, oc);
+
+      if (variable->lit_id.packed_value == lit_id.packed_value)
+      {
+        variable->is_stack = variable->is_stack && current_tree == tree;
+        return;
+      }
+    }
+    current_tree = (scopes_tree) current_tree->t.parent;
+  }
 }
