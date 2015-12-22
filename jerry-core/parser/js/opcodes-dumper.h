@@ -306,7 +306,7 @@ void dumper_init (void);
 void dumper_free (void);
 
 void dumper_start_move_of_vars_to_regs ();
-bool dumper_start_move_of_args_to_regs (uint32_t args_num);
+void dumper_start_move_of_args_to_regs ();
 bool dumper_try_replace_identifier_name_with_reg (scopes_tree, lit_cpointer_t, bool);
 void dumper_alloc_reg_for_unused_arg (void);
 

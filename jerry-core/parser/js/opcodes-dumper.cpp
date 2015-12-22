@@ -189,35 +189,20 @@ dumper_start_move_of_vars_to_regs ()
 
 /**
  * Start move of argument values to registers optimization pass
- *
- * @return true - if optimization can be performed successfully (i.e. there are enough free registers),
- *         false - otherwise.
  */
-bool
-dumper_start_move_of_args_to_regs (uint32_t args_num) /**< number of arguments */
+void
+dumper_start_move_of_args_to_regs ()
 {
   JERRY_ASSERT (jsp_reg_max_for_args == VM_IDX_EMPTY);
 
   if (jsp_reg_max_for_local_var == VM_IDX_EMPTY)
   {
-    if (args_num + jsp_reg_max_for_temps >= VM_REG_GENERAL_LAST)
-    {
-      return false;
-    }
-
     jsp_reg_max_for_args = jsp_reg_max_for_temps;
   }
   else
   {
-    if (args_num + jsp_reg_max_for_local_var >= VM_REG_GENERAL_LAST)
-    {
-      return false;
-    }
-
     jsp_reg_max_for_args = jsp_reg_max_for_local_var;
   }
-
-  return true;
 } /* dumper_start_move_of_args_to_regs */
 
 /**
